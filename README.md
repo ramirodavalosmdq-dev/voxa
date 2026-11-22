@@ -3,18 +3,16 @@
 Pegás un texto, tocás **HABLAR** y un personaje 3D (androide o anciano sabio) se materializa y lo lee con voz humana,
 moviendo la boca sincronizada con el audio, mientras alrededor aparecen imágenes de lo que se está contando.
 
-## Variables de entorno (Netlify → Project configuration → Environment variables)
+Publicada con **GitHub Pages** (sin servidor). Las claves se cargan en **Ajustes → Claves** y quedan guardadas
+solo en el navegador de cada dispositivo; nunca se suben al repositorio.
 
-| Variable | Obligatoria | Para qué |
+| Clave | Para qué | Dónde se saca |
 |---|---|---|
-| `ELEVENLABS_API_KEY` | Sí | Voces humanas (ElevenLabs) |
-| `FAL_KEY` | No | Ilustraciones con IA cuando no hay foto real (fal.ai, FLUX schnell) |
-| `APP_CODE` | Recomendada | Código de acceso para que nadie más gaste tus créditos |
-| `PLAN_MODEL` | No | Modelo Gemini para planificar escenas (por defecto prueba varios) |
+| ElevenLabs | Voces humanas (obligatoria para la voz con IA) | elevenlabs.io → perfil → API Keys |
+| fal.ai | Ilustraciones con IA cuando no hay foto real (opcional) | fal.ai → Dashboard → Keys |
+| Gemini | Elegir qué imagen va en cada escena (opcional, tiene uso gratis) | aistudio.google.com → Get API key |
 
-La planificación de escenas usa la **IA de Netlify (AI Gateway)**, sin cuentas extra: se activa sola después del primer deploy de producción.
-Las fotos reales salen de Wikipedia / Wikimedia Commons (gratis).
+Sin claves funciona igual con la voz del dispositivo. Las fotos reales salen de Wikipedia / Wikimedia Commons.
 
-## Estructura
-- `public/index.html` — la app (se genera desde `dev/src.html` + `dev/device.js` + `dev/bgs.js` + el modelo de cara).
-- `netlify/functions/` — `tts` (voz + tiempos por letra), `voices`, `plan`, `imagen`, `health`.
+## Desarrollo
+`index.html` se genera con `python3 dev/build.py` a partir de `dev/src.html`, `dev/device.js`, `dev/bgs.js` y `dev/face.glb`.

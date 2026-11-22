@@ -121,8 +121,13 @@ input[type=range]{flex:1;accent-color:var(--acc)}
    </select>
    <div class="lbl">VOCES DE TU CUENTA ELEVENLABS</div>
    <div class="vm" id="vmap"><span style="grid-column:1/3;opacity:.7">Se cargan cuando la voz con IA está activa.</span></div>
-   <div class="lbl">CÓDIGO DE ACCESO</div>
-   <input type="password" id="code" placeholder="Sólo si configuraste uno en Netlify">
+   <div class="lbl">CLAVES (QUEDAN GUARDADAS SOLO EN ESTE DISPOSITIVO)</div>
+   <div class="vm">
+    <span>ElevenLabs</span><input type="password" id="kEl" placeholder="Voz humana (obligatoria)" autocomplete="off">
+    <span>fal.ai</span><input type="password" id="kFal" placeholder="Ilustraciones IA (opcional)" autocomplete="off">
+    <span>Gemini</span><input type="password" id="kGem" placeholder="Elegir imágenes (opcional, gratis)" autocomplete="off">
+   </div>
+   <div style="font-size:12.5px;opacity:.65;margin-top:6px;line-height:1.35">ElevenLabs: perfil → API Keys · fal.ai: Dashboard → Keys · Gemini: aistudio.google.com → Get API key</div>
    <div class="lbl">VOZ DEL DISPOSITIVO (RESPALDO)</div>
    <select id="voice"></select>
    <label class="tog"><input type="checkbox" id="follow"> La mirada sigue tu dedo</label>
@@ -699,18 +704,59 @@ function exprFor(txt){
 }
 function markChips(sel,k){ document.querySelectorAll(sel+' .chip').forEach(c=>c.classList.toggle('on',c.dataset.k===k)); }
 
-/* ============ SERVIDOR (voz humana, plan de escenas, imágenes) ============ */
-const API={ok:false,tts:false,img:false,plan:false,needCode:false,codeOk:true};
-let code=store.get('code','');
-async function api(path,body){
- const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','x-voxa-code':code},body:body?JSON.stringify(body):undefined});
- const j=await r.json().catch(()=>({error:'Respuesta inválida del servidor'}));
- if(!r.ok) throw Object.assign(new Error(j.error||('Error '+r.status)),{status:r.status});
- return j;
-}
+/* ============ SERVICIOS DE IA (llamados directo desde este dispositivo) ============ */
+// Las claves se guardan SOLO en este navegador (localStorage). No viajan a ningún servidor propio.
+const API={ok:true,tts:false,img:false,plan:false,codeOk:true};
+const KEYS={el:store.get('kEl',''),fal:store.get('kFal',''),gem:store.get('kGem','')};
+function apiErr(msg,status){ return Object.assign(new Error(msg),{status}); }
+async function readErr(r){ let t=await r.text().catch(()=>''); try{const j=JSON.parse(t); t=j.detail?.message||j.detail?.status||(typeof j.detail==='string'?j.detail:'')||j.error?.message||j.message||t;}catch(e){} return String(t).slice(0,240); }
+const LOCAL={
+ async tts(b){
+  const s=b.settings||{}; const vs={stability:s.stability,similarity_boost:s.similarity_boost,style:s.style,use_speaker_boost:true,speed:s.speed};
+  const body={text:b.text,model_id:b.model,voice_settings:vs,language_code:'es'};
+  if(/^eleven_(multilingual|turbo|flash)/.test(b.model)){ if(b.prev) body.previous_text=b.prev.slice(-400); if(b.next) body.next_text=b.next.slice(0,400); }
+  const call=bd=>fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(b.voiceId)}/with-timestamps?output_format=mp3_44100_128`,{method:'POST',headers:{'xi-api-key':KEYS.el,'Content-Type':'application/json'},body:JSON.stringify(bd)});
+  let r=await call(body);
+  if(r.status===400||r.status===422){ delete body.language_code; delete body.previous_text; delete body.next_text; r=await call(body); }
+  if(!r.ok) throw apiErr(await readErr(r),r.status);
+  const j=await r.json(); return {audio:j.audio_base64,al:j.alignment||j.normalized_alignment||null};
+ },
+ async voices(){
+  const r=await fetch('https://api.elevenlabs.io/v1/voices',{headers:{'xi-api-key':KEYS.el}});
+  if(!r.ok) throw apiErr(await readErr(r),r.status);
+  const j=await r.json(); return {voices:(j.voices||[]).map(v=>({id:v.voice_id,name:v.name,labels:v.labels||{}}))};
+ },
+ async imagen(b){
+  const r=await fetch('https://fal.run/fal-ai/flux/schnell',{method:'POST',headers:{Authorization:'Key '+KEYS.fal,'Content-Type':'application/json'},
+   body:JSON.stringify({prompt:b.prompt,image_size:'landscape_4_3',num_inference_steps:4,num_images:1,enable_safety_checker:true})});
+  if(!r.ok) throw apiErr(await readErr(r),r.status);
+  const j=await r.json(); return {url:j.images?.[0]?.url||null};
+ },
+ async plan(b){
+  const style=b.style==='historia'?'oil painting or vintage engraving style, warm sepia tones, museum quality, historically accurate':'cinematic photorealistic still, dramatic soft lighting, rich detail';
+  const prompt=`Sos el director de arte de un narrador visual. Para cada escena numerada de este texto en español, devolvé qué imagen mostrar de fondo mientras se narra.
+Devolvé SOLO JSON: {"scenes":[{"i":0,"wiki_es":"...","wiki_en":"...","prompt":"..."}]} con una entrada por escena, en orden.
+- wiki_es / wiki_en: búsqueda corta (2 a 5 palabras) para encontrar en Wikipedia una FOTO o PINTURA REAL de la persona, lugar, objeto, obra o evento concreto de esa escena. Si la escena es abstracta, dejalas vacías "".
+- prompt: en inglés, descripción visual concreta de la escena para generar una ilustración (sujeto, lugar, época, ambiente), estilo: ${style}. Sin texto en la imagen. Máximo 45 palabras.
+Usá el contexto de todo el texto para que época y lugar sean coherentes.
+
+${b.scenes.map((t,i)=>`[${i}] ${t}`).join('\n')}`;
+  let last;
+  for(const m of ['gemini-flash-latest','gemini-2.5-flash','gemini-2.0-flash']){
+   try{ const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(KEYS.gem)}`,{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:.4}})});
+    if(!r.ok){ last=apiErr(await readErr(r),r.status); if(r.status===400||r.status===403) break; continue; }
+    const j=await r.json(); const t=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim().replace(/^```json|```$/g,'');
+    const o=JSON.parse(t); return {scenes:Array.isArray(o)?o:(o.scenes||[])};
+   }catch(e){ last=e; }
+  }
+  throw last||apiErr('Sin respuesta de Gemini',502);
+ }
+};
+async function api(path,body){ return LOCAL[path](body); }
 async function checkHealth(){
- try{ const h=await api('health'); Object.assign(API,h,{ok:true}); }catch(e){ API.ok=false; API.tts=false; }
- updateEngineUI(); if(API.tts&&API.codeOk) loadAccountVoices();
+ API.tts=!!KEYS.el; API.img=!!KEYS.fal; API.plan=!!KEYS.gem;
+ updateEngineUI(); if(API.tts) loadAccountVoices();
 }
 const VSLOTS=[
  {k:'sofia',n:'Sofía',g:'mujer',id:'EXAVITQu4vr4xnSDxMaL'},
@@ -726,10 +772,8 @@ function setVoice(k){ voiceK=slotOf(k).k; store.set('voiceK',voiceK); if(slotOf(
 for(const v of VSLOTS){const b=document.createElement('button'); b.className='chip'; b.dataset.k=v.k; b.innerHTML=`${v.n}<small>${v.g}</small>`; b.onclick=()=>{ setVoice(v.k); if(playing&&E.on) restartFrom(); }; $('#vsl').appendChild(b);}
 function updateEngineUI(){
  const e=$('#eng');
- if(API.ok&&API.tts&&!API.codeOk){ e.innerHTML='🔒 Falta el código de acceso (en Ajustes).'; return; }
- if(API.ok&&API.tts) e.innerHTML=`✅ Voz humana con IA activa · Imágenes: fotos reales${API.img?' + IA':''}${API.plan?' · escenas planificadas con IA':''}`;
- else if(API.ok) e.innerHTML='⚠️ Servidor conectado, pero falta la clave de ElevenLabs. Uso la voz del dispositivo.';
- else e.innerHTML='Voz del dispositivo (la voz humana funciona cuando la app está publicada en tu Netlify).';
+ if(API.tts) e.innerHTML=`✅ Voz humana activa · Imágenes: fotos reales${API.img?' + ilustraciones IA':''}${API.plan?' · escenas elegidas por IA':''}`;
+ else e.innerHTML='🔑 Para la voz humana, cargá tu clave de ElevenLabs en <b>Ajustes → Claves</b>. Mientras tanto uso la voz del dispositivo.';
 }
 async function loadAccountVoices(){
  let list=[]; try{ list=(await api('voices')).voices||[]; }catch(e){ return; }
@@ -793,7 +837,7 @@ async function startEleven(from){
 }
 function ttsFail(e){
  E.on=false; playing=false;
- if(e.status===401) note('🔒 Código de acceso incorrecto. Revisalo en Ajustes.');
+ if(e.status===401) note('🔑 La clave de ElevenLabs no es válida. Revisala en Ajustes → Claves.');
  else note('La voz con IA no respondió: '+(e.message||e)+'. Sigo con la voz del dispositivo.');
  startDevice(0);
 }
@@ -1002,7 +1046,7 @@ function frame(now){
 $('#imgOn').checked=IMG.on; $('#imgOn').onchange=e=>{IMG.on=e.target.checked; store.set('imgOn',IMG.on); if(!IMG.on) clearImgs();};
 $('#aiOn').checked=IMG.ai; $('#aiOn').onchange=e=>{IMG.ai=e.target.checked; store.set('aiOn',IMG.ai);};
 $('#model').value=ttsModel; $('#model').onchange=e=>{ttsModel=e.target.value; store.set('model',ttsModel);};
-$('#code').value=code; $('#code').onchange=e=>{code=e.target.value.trim(); store.set('code',code); checkHealth();};
+for(const [id,k] of [['kEl','el'],['kFal','fal'],['kGem','gem']]){ const i=$('#'+id); i.value=KEYS[k]; i.onchange=()=>{ KEYS[k]=i.value.trim(); store.set(id,KEYS[k]); checkHealth(); }; }
 const emoI=$('#emo'); emoI.value=emo; $('#emoV').textContent=Math.round(emo*100)+'%'; emoI.oninput=()=>{emo=+emoI.value; $('#emoV').textContent=Math.round(emo*100)+'%'; store.set('emo',emo);};
 setVoice(voiceK);
 applySkin(store.get('skin','androide'));
