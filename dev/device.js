@@ -30,12 +30,16 @@ function buildChunks(text,from){
 function tokens(text){const r=[],re=/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu;let m;while((m=re.exec(text)))r.push({i:m.index,w:m[0]});return r;}
 function unlockAudio(){ if(!synth) return; try{const u=new SpeechSynthesisUtterance(' '); u.volume=0; synth.speak(u);}catch(e){} }
 
-function requestSpeak(){
+async function requestSpeak(){
  const text=ta.value; if(!text.trim()){ ta.focus(); flashSys('PEGÁ UN TEXTO PRIMERO'); return; }
- store.set('text',text); $('#panel').classList.add('min'); clearTimeout(vanishTimer);
+ store.set('text',text); clearTimeout(vanishTimer);
  if(E.on&&E.paused){ E.paused=false; ensureAudio2(); E.player.play().catch(()=>{}); setStatus('HABLANDO'); setBtn(); return; }
  if(paused){ startDevice(resumeAt); return; }
- if(API.tts&&API.codeOk){ ensureAudio(); startEleven(0); return; }
+ if(API.tts){ ensureAudio(); unlockAudio(); const c=await askCost(text);
+  if(c==='c') return;
+  $('#panel').classList.add('min');
+  if(c==='h'){ startEleven(0); return; } }
+ $('#panel').classList.add('min');
  if(P.state==='shown') startDevice(0); else { unlockAudio(); materialize(()=>startDevice(0)); }
 }
 function ensureAudio2(){ try{E.ctx&&E.ctx.resume();}catch(e){} }
@@ -90,7 +94,7 @@ function stopAll(keep){ sid++; synth&&synth.cancel(); playing=false; paused=fals
  E.sid++; E.on=false; E.cur=null; E.paused=false; try{E.player.pause();}catch(e){} IMG.sid=E.sid;
  if(!keep){ resumeAt=0; subs.innerHTML=''; $('#pg').style.width='0'; clearImgs(); IMG.scenes=[]; setStatus(P.state==='shown'?'LISTO':'EN ESPERA'); setBtn(); } }
 let vanishTimer=null;
-function finish(){ playing=false; sim=null; E.on=false; setStatus('LISTO'); setBtn(); $('#pg').style.width='100%'; S.tSmile=SK.baseSmile+.3; S.tBrow=.2; resumeAt=0;
+function finish(){ if(E.spent){ E.spent=false; setTimeout(loadSaldo,1500); } playing=false; sim=null; E.on=false; setStatus('LISTO'); setBtn(); $('#pg').style.width='100%'; S.tSmile=SK.baseSmile+.3; S.tBrow=.2; resumeAt=0;
  setTimeout(()=>{ if(!playing) subs.style.opacity=0; },1600);
  setTimeout(()=>{ if(!playing) clearImgs(); },3000);
  clearTimeout(vanishTimer); vanishTimer=setTimeout(()=>{ if(!playing) dematerialize(); },3600);
