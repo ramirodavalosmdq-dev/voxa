@@ -93,7 +93,7 @@ let vanishTimer=null;
 function finish(){ playing=false; sim=null; E.on=false; setStatus('LISTO'); setBtn(); $('#pg').style.width='100%'; S.tSmile=SK.baseSmile+.3; S.tBrow=.2; resumeAt=0;
  setTimeout(()=>{ if(!playing) subs.style.opacity=0; },1600);
  setTimeout(()=>{ if(!playing) clearImgs(); },3000);
- clearTimeout(vanishTimer); if($('#vanish').checked) vanishTimer=setTimeout(()=>{ if(!playing) dematerialize(); },3600);
+ clearTimeout(vanishTimer); vanishTimer=setTimeout(()=>{ if(!playing) dematerialize(); },3600);
 }
 function renderText(t){ clearTimeout(vanishTimer); subs.style.opacity=1; subs.innerHTML='';
  const re=/\S+/g; let m; while((m=re.exec(t))){const sp=document.createElement('span'); sp.textContent=m[0]; sp.dataset.s=m.index; sp.dataset.e=m.index+m[0].length; subs.appendChild(sp); subs.appendChild(document.createTextNode(' '));}}
@@ -104,15 +104,16 @@ function setStatus(t){ $('#st').textContent=t; }
 function setBtn(){ $('#bPause').textContent=(paused||E.paused)?'▶':'❚❚'; }
 for(const [k,v] of Object.entries(SKINS)){const b=document.createElement('button'); b.className='chip'; b.dataset.k=k; b.textContent=v.n; b.onclick=()=>applySkin(k,true); $('#skins').appendChild(b);}
 for(const [k,v] of Object.entries(BGS)){const b=document.createElement('button'); b.className='chip'; b.dataset.k=k; b.textContent=v.n; b.onclick=()=>setBG(k); $('#bgs').appendChild(b);}
-$('#bPlay').onclick=requestSpeak; $('#bPause').onclick=pause; $('#bStop').onclick=()=>stopAll(false);
-$('#bClr').onclick=()=>{ ta.value=''; store.set('text',''); $('#panel').classList.remove('min'); ta.focus(); };
+$('#bPlay').onclick=requestSpeak; $('#bPause').onclick=pause; $('#bStop').onclick=()=>{ stopAll(false); clearTimeout(vanishTimer); dematerialize(); };
+// al escribir o pegar un texto nuevo, el personaje se va: solo aparece al tocar HABLAR
+ta.addEventListener('input',()=>{ if(playing) stopAll(false); clearTimeout(vanishTimer); dematerialize(); });
+$('#bClr').onclick=()=>{ if(playing) stopAll(false); clearTimeout(vanishTimer); dematerialize(); ta.value=''; store.set('text',''); $('#panel').classList.remove('min'); ta.focus(); };
 $('#bSet').onclick=()=>{const d=$('#sets');d.style.display=d.style.display==='none'?'block':'none';};
 $('#handle').onclick=()=>$('#panel').classList.toggle('min');
 const rateI=$('#rate'); rateI.value=rate; $('#rateV').textContent=(+rate).toFixed(2);
 rateI.oninput=()=>{rate=+rateI.value; mpc=70/rate; $('#rateV').textContent=rate.toFixed(2); store.set('rate',rate);};
 $('#follow').checked=store.get('follow',true); $('#follow').onchange=e=>store.set('follow',e.target.checked);
-$('#vanish').checked=store.get('vanish',true); $('#vanish').onchange=e=>store.set('vanish',e.target.checked);
 mpc=70/rate;
 ta.value=store.get('text','')||'Hola, soy VOXA. Pegá cualquier texto y lo leo en voz alta, con una voz humana y expresiva. Mientras hablo, a mi alrededor van apareciendo imágenes de lo que estoy contando. ¿Te gusta la historia? Elegí al anciano sabio y te la cuenta él, como en los viejos tiempos.';
 canvas.addEventListener('pointermove',e=>{S.px=e.clientX/innerWidth*2-1;S.py=-(e.clientY/innerHeight*2-1);S.pointerT=T;});
-canvas.addEventListener('pointerdown',e=>{S.px=e.clientX/innerWidth*2-1;S.py=-(e.clientY/innerHeight*2-1);S.pointerT=T; if(P.state==='hidden'&&!playing) materialize(()=>{setStatus('LISTO');flashSys('LISTO PARA LEER');});});
+canvas.addEventListener('pointerdown',e=>{S.px=e.clientX/innerWidth*2-1;S.py=-(e.clientY/innerHeight*2-1);S.pointerT=T;});

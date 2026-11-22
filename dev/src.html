@@ -131,7 +131,6 @@ input[type=range]{flex:1;accent-color:var(--acc)}
    <div class="lbl">VOZ DEL DISPOSITIVO (RESPALDO)</div>
    <select id="voice"></select>
    <label class="tog"><input type="checkbox" id="follow"> La mirada sigue tu dedo</label>
-   <label class="tog"><input type="checkbox" id="vanish"> Desintegrarse al terminar</label>
   </div>
  </div>
 </div>
@@ -352,7 +351,7 @@ loader.parse(b64ToBuf($('#glb').textContent),'',gl=>{
  const P_=headMesh.geometry.attributes.position, v=new THREE.Vector3();
  for(let i=0;i<P_.count;i+=Math.max(1,Math.floor(P_.count/1500))){v.fromBufferAttribute(P_,i).applyMatrix4(headMesh.matrixWorld); swarmTargets.push(v.x,v.y,v.z);}
  sampleTargets(); ready=true; applySkin(skinKey); $('#loading').style.display='none';
- setTimeout(()=>materialize(()=>{setStatus('LISTO');flashSys('LISTO PARA LEER');}),300);
+ setStatus('EN ESPERA');
 },err=>{ $('#loading').textContent='NO SE PUDO CARGAR LA CARA'; console.error(err); });
 function setM(n,v){const i=MD[n]; if(i!==undefined) MI[i]=v;}
 
@@ -442,7 +441,7 @@ function applySkin(k,user){
  if(user&&prev!==k){
   if(SK.mode===1){ setVoice('aurelio'); if(bgKey==='estudio') setBG('archivo'); }
   else if(SKINS[prev]?.mode===1){ setVoice(store.get('voiceA','sofia')); if(bgKey==='archivo') setBG('estudio'); }
-  if(P.state==='shown'&&!playing){ dematerialize(); setTimeout(()=>materialize(()=>{setStatus('LISTO');}),2400); }
+  if(P.state==='shown'&&!playing) dematerialize();
  }
 }
 
