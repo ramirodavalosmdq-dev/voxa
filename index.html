@@ -693,7 +693,7 @@ function candidates(s){
  for(const e of s.ents||[]){ add('s','es',topic&&!e.includes(topic)?`${e} ${topic}`:e,e); }
  // frases de dos palabras ("inteligencia artificial", "revolución industrial") como artículo exacto
  const ws=(s.text.toLowerCase().match(/[a-záéíóúñü]+/g)||[]);
- for(let k=0;k<ws.length-1;k++){ const a=ws[k],b=ws[k+1]; if(a.length>=5&&b.length>=5&&!STOP.has(a)&&!STOP.has(b)&&!/(ó|aron|ieron|aba|ían|ás|ará|erá|irá)$/.test(a+'|'+b)&&!/(ó|aron|ieron|aba|ían|ás|ará|erá|irá)$/.test(a)){ const ph=a[0].toUpperCase()+a.slice(1)+' '+b; add('t','es',ph); } }
+ for(let k=0;k<ws.length-1;k++){ const a=ws[k],b=ws[k+1]; if(a.length>=5&&b.length>=5&&!STOP.has(a)&&!STOP.has(b)&&!/(ó|aron|ieron|aba|ían|ás|ará|erá|irá)$/.test(a+'|'+b)&&!/(ó|aron|ieron|aba|ían|ás|ará|erá|irá)$/.test(a)){ const ph=a[0].toUpperCase()+a.slice(1)+' '+b; add('t','es',ph); add('s','es',ph,ph); } }
  if(s.kw&&topic) add('s','es',`${s.kw} ${topic}`,topic);
  if(topic){ add('t','es',topic); add('s','es',topic,topic); }
  if(s.kw) add('s','es',s.kw+(s.year?' '+s.year:''),s.kw);
