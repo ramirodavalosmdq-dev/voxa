@@ -75,6 +75,8 @@ input[type=range]{flex:1;accent-color:var(--acc)}
 #note{display:none;margin-top:10px;font-size:14px;line-height:1.35;padding:10px 12px;border-radius:12px;border:1px solid #ffb02e88;background:#ffb02e14;color:#ffe2b0}
 #ask{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:18px}
 #ask[hidden],#diag[hidden]{display:none}
+#camPrev{position:fixed;top:62px;left:12px;width:64px;height:48px;object-fit:cover;border-radius:10px;transform:scaleX(-1);border:1px solid var(--acc);z-index:3;opacity:.85;box-shadow:0 0 10px rgba(0,0,0,.6)}
+#camPrev[hidden]{display:none}
 #diag{position:fixed;inset:0;z-index:21;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:14px}
 #diag pre{white-space:pre-wrap;font:12.5px/1.4 ui-monospace,Menlo,monospace;max-height:60vh;overflow:auto;background:rgba(0,0,0,.4);padding:10px;border-radius:10px;color:#cfe3ef}
 .abox{width:min(380px,100%);background:linear-gradient(180deg,#121a2b,#070b14);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:20px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
@@ -113,6 +115,7 @@ input[type=range]{flex:1;accent-color:var(--acc)}
  <div class="stat"><span class="dot"></span><span id="st">EN ESPERA</span><div class="prog"><i id="pg"></i></div></div>
 </div>
 <div id="subs"></div>
+<video id="camPrev" hidden muted playsinline autoplay></video>
 
 <div id="panel">
  <button class="handle" id="handle" aria-label="Mostrar u ocultar panel"></button>
@@ -161,6 +164,7 @@ input[type=range]{flex:1;accent-color:var(--acc)}
    <div class="lbl">VOZ DEL DISPOSITIVO (RESPALDO)</div>
    <select id="voice"></select>
    <label class="tog"><input type="checkbox" id="follow"> La mirada sigue tu dedo</label>
+   <label class="tog"><input type="checkbox" id="camOn"> La mirada te sigue con la cámara (se procesa solo en tu dispositivo, no se graba ni se envía)</label>
   </div>
  </div>
 </div>
@@ -970,6 +974,41 @@ function askCost(text){
 }
 /*__DEVICE__*/
 
+/* ============ CÁMARA: el personaje te sigue con la mirada ============ */
+const CAM={on:false,stream:null,det:null,video:null,x:0,y:0,seen:-10};
+async function camStart(){
+ try{
+  if(!navigator.mediaDevices?.getUserMedia) throw new Error('este navegador no permite usar la cámara');
+  CAM.video=CAM.video||Object.assign(document.createElement('video'),{muted:true,playsInline:true});
+  CAM.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+  CAM.video.srcObject=CAM.stream; await CAM.video.play();
+  const pv=$('#camPrev'); pv.srcObject=CAM.stream; pv.hidden=false;
+  if(!CAM.det){
+   const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3';
+   const m=await import(V+'/vision_bundle.mjs'); const fs=await m.FilesetResolver.forVisionTasks(V+'/wasm');
+   const opt=d=>({baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',delegate:d},runningMode:'VIDEO',minDetectionConfidence:.5});
+   try{ CAM.det=await m.FaceDetector.createFromOptions(fs,opt('GPU')); }catch(e){ CAM.det=await m.FaceDetector.createFromOptions(fs,opt('CPU')); }
+  }
+  if(!$('#camOn').checked){ camStop(); return; }
+  CAM.on=true; camLoop();
+ }catch(e){ note('📷 No pude usar la cámara: '+(e.name==='NotAllowedError'?'no diste permiso':(e.message||e))+'.'); $('#camOn').checked=false; store.set('camOn',false); camStop(); }
+}
+function camStop(){ CAM.on=false; if(CAM.stream) CAM.stream.getTracks().forEach(t=>t.stop()); CAM.stream=null; const pv=$('#camPrev'); pv.srcObject=null; pv.hidden=true; }
+let camLast=-1;
+function camLoop(){
+ if(!CAM.on) return; setTimeout(camLoop,80);
+ if(P.state==='hidden'||!CAM.det||CAM.video.readyState<2||document.hidden) return;
+ const ts=performance.now(); if(ts<=camLast) return; camLast=ts;
+ try{ const r=CAM.det.detectForVideo(CAM.video,ts); const d=(r.detections||[]).sort((a,b)=>(b.boundingBox?.width||0)-(a.boundingBox?.width||0))[0];
+  if(d&&d.boundingBox){ const b=d.boundingBox, vw=CAM.video.videoWidth||640, vh=CAM.video.videoHeight||480;
+   const cx=(b.originX+b.width/2)/vw, cy=(b.originY+b.height*.4)/vh;
+   CAM.x=CAM.x*.5+clamp((1-2*cx)*1.4,-1,1)*.5; CAM.y=CAM.y*.5+clamp((1-2*cy)*1.3,-1,1)*.5; CAM.seen=T; } }catch(e){}
+}
+$('#camOn').checked=store.get('camOn',false);
+$('#camOn').onchange=e=>{ store.set('camOn',e.target.checked); if(e.target.checked) camStart(); else camStop(); };
+if($('#camOn').checked) camStart();
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&CAM.on){ camStop(); CAM.paused=true; } else if(!document.hidden&&CAM.paused&&$('#camOn').checked){ CAM.paused=false; camStart(); } });
+
 /* ============ LOOP ============ */
 let last=performance.now(); const qd=new THREE.Quaternion(), eu=new THREE.Euler(), followEl=$('#follow');
 function frame(now){
@@ -983,8 +1022,10 @@ function frame(now){
  if(!playing&&T%6<dt){S.tBrow=0;S.tBrowIn=0;S.tTilt=0;S.tEyeWide=0;S.tSmile=SK.baseSmile;}
  if(T>S.nextBlink){S.blink=1; S.nextBlink=T+rnd(1.8,5); if(Math.random()<.15) S.nextBlink=T+.3;}
  S.blink=Math.max(0,S.blink-dt*6.5); const lid=Math.sin(S.blink*Math.PI);
- const follow=followEl.checked&&T-S.pointerT<2.5;
- if(follow){S.tgx=S.px*.45;S.tgy=S.py*.3;}
+ const camF=CAM.on&&T-CAM.seen<1.5;
+ const follow=camF||(followEl.checked&&T-S.pointerT<2.5);
+ if(camF&&!(followEl.checked&&T-S.pointerT<1)){S.tgx=CAM.x*.45;S.tgy=CAM.y*.3;}
+ else if(follow){S.tgx=S.px*.45;S.tgy=S.py*.3;}
  else if(T>S.nextSacc){S.nextSacc=T+rnd(.6,2.6); const away=Math.random()<.16; S.tgx=away?rnd(-.35,.35):rnd(-.07,.07); S.tgy=away?rnd(-.12,.2):rnd(-.04,.05);}
  S.gx+=(S.tgx-S.gx)*f(follow?8:16); S.gy+=(S.tgy-S.gy)*f(follow?8:16);
  S.nodV+=(-S.nod*70-S.nodV*9)*dt; S.nod+=S.nodV*dt;
