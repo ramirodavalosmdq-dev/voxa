@@ -328,7 +328,7 @@ function earCup(s){
  acc.add(g);
 }
 earCup(-1); earCup(1);
-{ const neck=new THREE.Group(); neck.position.set(0,-.95,-.3); acc.add(neck);
+{ const neck=new THREE.Group(); neck.position.set(0,-.95,-.3); /* solo cabeza: el cuello y los hombros no se muestran */
  const core=new THREE.Mesh(new THREE.CylinderGeometry(.34,.42,1.5,48,1,true),mDark); core.position.y=-.35; neck.add(core);
  for(let i=0;i<11;i++){const r=new THREE.Mesh(new THREE.TorusGeometry(.355+i*.008,.022,10,48),mNavy); r.rotation.x=Math.PI/2; r.position.y=.25-i*.11; neck.add(r);}
  for(let k=0;k<14;k++){const a=k/14*Math.PI*2; if(Math.sin(a)<-.2) continue; const c=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,1.3,8),k%3?mDark:mNavy);
@@ -353,10 +353,10 @@ for(const s of[-1,1]){
  oldAcc.add(rod([s*.8,.27,-.12],[s*.84,.12,-.42],.009,mGold));
 }
 {const br=new THREE.Mesh(new THREE.TorusGeometry(.07,.01,8,24,Math.PI),mGold); br.position.set(0,.3,.69); oldAcc.add(br);
- const nk=new THREE.Mesh(new THREE.CylinderGeometry(.33,.4,1.1,40),mSkinOld); nk.position.set(0,-1.25,-.32); oldAcc.add(nk);
- const shirt=new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,.35,40,1,true),mShirt); shirt.position.set(0,-1.62,-.3); oldAcc.add(shirt);
- const coat=new THREE.Mesh(new THREE.SphereGeometry(1,64,32,0,Math.PI*2,0,Math.PI*.5),mWool); coat.scale.set(1.55,.5,.9); coat.position.set(0,-2.2,-.3); oldAcc.add(coat);
- const lap=new THREE.Mesh(new THREE.TorusGeometry(.55,.07,12,48,Math.PI),mWool); lap.rotation.set(Math.PI/2,0,Math.PI); lap.position.set(0,-1.72,-.3); oldAcc.add(lap);
+ const nk=new THREE.Mesh(new THREE.CylinderGeometry(.33,.4,1.1,40),mSkinOld); nk.position.set(0,-1.25,-.32); /* solo cabeza */
+ const shirt=new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,.35,40,1,true),mShirt); shirt.position.set(0,-1.62,-.3); /* solo cabeza */
+ const coat=new THREE.Mesh(new THREE.SphereGeometry(1,64,32,0,Math.PI*2,0,Math.PI*.5),mWool); coat.scale.set(1.55,.5,.9); coat.position.set(0,-2.2,-.3); /* solo cabeza */
+ const lap=new THREE.Mesh(new THREE.TorusGeometry(.55,.07,12,48,Math.PI),mWool); lap.rotation.set(Math.PI/2,0,Math.PI); lap.position.set(0,-1.72,-.3); /* solo cabeza */
 }
 oldAcc.visible=false;
 
@@ -399,7 +399,7 @@ const scanMat=new THREE.MeshBasicMaterial({color:0xbfe6ff,transparent:true,opaci
 const scanRing=new THREE.Mesh(new THREE.TorusGeometry(1,.01,8,96),scanMat); scanRing.rotation.x=Math.PI/2; rig.add(scanRing);
 function sampleTargets(){ const n=swarmTargets.length/3;
  for(let i=0;i<NA;i++){
-  if(i<NA*.85){const k=Math.floor(Math.random()*n)*3; aEnd.set([swarmTargets[k],swarmTargets[k+1],swarmTargets[k+2]],i*3);}
+  if(true){const k=Math.floor(Math.random()*n)*3; aEnd.set([swarmTargets[k],swarmTargets[k+1],swarmTargets[k+2]],i*3);}
   else{const th=rnd(0,Math.PI*2),yy=rnd(-2.4,-.9); aEnd.set([.4*Math.cos(th),yy,.4*Math.sin(th)-.3],i*3);} } }
 const P={state:'hidden',t:0,dur:3.4,dir:1,spin:1,eyePow:0,onDone:null,variant:0};
 function setSwarmStart(){ const v=P.variant;
@@ -415,7 +415,7 @@ function materialize(cb){ if(!ready){ setTimeout(()=>materialize(cb),200); retur
 function dematerialize(){ if(P.state!=='shown') return; P.state='leaving'; P.t=0; P.variant=Math.floor(Math.random()*3); setSwarmStart(); setStatus('EN ESPERA'); }
 function hideNow(){ solidPlane.normal.set(0,-1,0); wirePlane.normal.set(0,-1,0); solidPlane.constant=-100; wirePlane.constant=-100; P.eyePow=0; aMat.opacity=0; }
 hideNow();
-const TOP=1.5, BOT=-2.6;
+const TOP=1.5, BOT=-1.15;
 function ringR(y){ return y<-.9?.45:y>1.35?.2:Math.max(.25,.8*Math.sqrt(Math.max(0,1-((y-.15)/1.3)**2))+.05); }
 function setPlanes(hw,hs,dir){ const yo=head.position.y;
  if(dir>0){wirePlane.normal.set(0,-1,0);wirePlane.constant=hw+yo;solidPlane.normal.set(0,-1,0);solidPlane.constant=hs+yo;}
