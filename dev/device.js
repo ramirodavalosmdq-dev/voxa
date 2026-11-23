@@ -5,10 +5,11 @@ let chunks=[], cur=-1, paused=false, resumeAt=0, sid=0, sim=null, noBoundary=fal
 const ta=$('#ta'), subs=$('#subs');
 function loadVoices(){
  if(!synth) return; devVoices=synth.getVoices(); if(!devVoices.length) return;
- const sc=v=>(/^es[-_]AR/i.test(v.lang)?0:/^es[-_](US|MX|419)/i.test(v.lang)?1:/^es/i.test(v.lang)?2:5);
+ const nat=v=>/natural|neural|online|premium|enhanced|mejorad|network|wavenet|studio/i.test(v.name)?-10:0;
+ const sc=v=>nat(v)+(/^es[-_]AR/i.test(v.lang)?0:/^es[-_](US|MX|419)/i.test(v.lang)?1:/^es/i.test(v.lang)?2:50);
  devVoices.sort((a,b)=>sc(a)-sc(b)||a.name.localeCompare(b.name));
  const sel=$('#voice'), saved=store.get('devVoice',''); sel.innerHTML='';
- devVoices.forEach((v,i)=>{const o=document.createElement('option'); o.value=i; o.textContent=`${v.name} (${v.lang})`; sel.appendChild(o);});
+ devVoices.forEach((v,i)=>{const o=document.createElement('option'); o.value=i; o.textContent=`${/natural|neural|online|premium|enhanced|mejorad|network|wavenet|studio/i.test(v.name)?'⭐ ':''}${v.name} (${v.lang})`; sel.appendChild(o);});
  let idx=devVoices.findIndex(v=>v.name===saved); if(idx<0) idx=0; sel.value=idx; devVoice=devVoices[idx];
 }
 if(synth){loadVoices(); synth.onvoiceschanged=loadVoices;}
@@ -35,11 +36,12 @@ async function requestSpeak(){
  store.set('text',text); clearTimeout(vanishTimer);
  if(E.on&&E.paused){ E.paused=false; ensureAudio2(); E.player.play().catch(()=>{}); setStatus('HABLANDO'); setBtn(); return; }
  if(paused){ startDevice(resumeAt); return; }
- if(API.tts){ ensureAudio(); unlockAudio(); const c=await askCost(text);
-  if(c==='c') return;
-  $('#panel').classList.add('min');
-  if(c==='h'){ startEleven(0); return; } }
+ ensureAudio(); unlockAudio();
+ let c=freeEng==='device'?'f':'p';
+ if(API.tts){ c=await askCost(text); if(c==='c') return; }
  $('#panel').classList.add('min');
+ if(c==='h'){ startEleven(0,'eleven'); return; }
+ if(c==='p'){ startEleven(0,'piper'); return; }
  if(P.state==='shown') startDevice(0); else { unlockAudio(); materialize(()=>startDevice(0)); }
 }
 function ensureAudio2(){ try{E.ctx&&E.ctx.resume();}catch(e){} }
@@ -51,7 +53,10 @@ function startDevice(from){
  if(silent||!devVoices.length&&!synth){ beginChunk(0,true,my); return; }
  synth.cancel();
  chunks.forEach((c,i)=>{const u=new SpeechSynthesisUtterance(c.text);
-  if(devVoice){u.voice=devVoice;u.lang=devVoice.lang;} else u.lang='es-AR'; u.rate=rate; u.pitch=SK.mode===1?.85:1;
+  if(devVoice){u.voice=devVoice;u.lang=devVoice.lang;} else u.lang='es-AR';
+  const tt=c.text.trim(), q=/\?\s*[»”"]?$/.test(tt), ex=/!\s*[»”"]?$/.test(tt), longS=tt.length>140, paren=/^\(/.test(tt);
+  u.rate=clamp(rate*(1+rnd(-.035,.035))*(longS?1.04:1)*(ex?1.04:1)*(SK.mode===1?.92:1),.5,2);
+  u.pitch=clamp((SK.mode===1?.85:1)*(q?1.08:ex?1.06:paren?.94:1)*(1+rnd(-.03,.03)),.5,2);
   u.onstart=()=>{ if(my!==sid) return; gotStart=true; beginChunk(i,false,my); };
   u.onboundary=e=>{ if(my!==sid||i!==cur) return; if(e.name&&e.name!=='word') return; c.gotB=true; if(sim&&sim.chunk===i){sim=null;} onWord(i,e.charIndex,e.charLength,true); };
   u.onend=()=>{ if(my!==sid) return; if(i===chunks.length-1) finish(); };

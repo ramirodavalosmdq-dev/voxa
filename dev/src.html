@@ -86,7 +86,7 @@ input[type=range]{flex:1;accent-color:var(--acc)}
 }
 </style>
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+{"imports":{"onnxruntime-web/wasm":"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/esm/ort.wasm.min.js","three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
 </head>
 <body>
@@ -100,7 +100,8 @@ input[type=range]{flex:1;accent-color:var(--acc)}
 <div id="ask" hidden><div class="abox">
  <div class="at" id="askT"></div><div class="as" id="askS"></div>
  <button class="btn pri" id="askH">🎙 VOZ HUMANA</button>
- <button class="btn" id="askF">📱 VOZ GRATIS DEL DISPOSITIVO</button>
+ <button class="btn" id="askP">🧠 VOZ IA GRATIS (SIN CRÉDITOS)</button>
+ <button class="btn" id="askF">📱 VOZ DEL DISPOSITIVO</button>
  <button class="btn" id="askC">CANCELAR</button>
 </div></div>
 <div class="hud">
@@ -131,7 +132,12 @@ input[type=range]{flex:1;accent-color:var(--acc)}
    <div class="lbl">VELOCIDAD Y EXPRESIÓN</div>
    <div class="sl"><span>Velocidad</span><input type="range" id="rate" min="0.75" max="1.2" step="0.05"><b id="rateV"></b></div>
    <div class="sl" style="margin-top:6px"><span>Emoción</span><input type="range" id="emo" min="0" max="1" step="0.05"><b id="emoV"></b></div>
-   <div class="lbl">MODELO DE VOZ</div>
+   <div class="lbl">VOZ GRATIS</div>
+   <select id="freeEng">
+    <option value="piper">Voz IA gratis en el dispositivo (más natural · descarga ~65 MB la 1ª vez)</option>
+    <option value="device">Voz del celular / computadora</option>
+   </select>
+   <div class="lbl">MODELO DE VOZ (ELEVENLABS)</div>
    <select id="model">
     <option value="eleven_multilingual_v2">Natural (recomendado)</option>
     <option value="eleven_v3">Ultra expresivo (experimental)</option>
@@ -596,6 +602,9 @@ function candidates(s){
  if(topic){ add('t','es',topic); add('s','es',topic,topic); }
  if(s.kw) add('s','es',s.kw+(s.year?' '+s.year:''),s.kw);
  (s.titles_en||[]).forEach(t=>add('c','',t));
+ const kws=keywords(s.text).slice(0,3).join(' ');
+ if(kws){ add('s','es',kws+(topic?' '+topic:''),null); add('s','es',kws,null); add('c','',kws); }
+ if(topic) add('c','',topic);
  return c;
 }
 async function loadScene(s,my){
@@ -611,10 +620,12 @@ async function loadScene(s,my){
  if(my!==IMG.sid) return;
  if(first&&await preload(first.url)){ s.photo=first.url; s.cred=first.cred; s.caption=s.caption||first.title; IMG.used.add(first.url); }
  if(!s.photo&&IMG.ai&&API.img&&s.prompt){ try{ const j=await api('imagen',{prompt:s.prompt}); if(j.url&&await preload(j.url)){ s.aiImg=j.url; } }catch(e){} }
- s.ready=true; if(my===IMG.sid&&IMG.cur===s.i) showScene(s);
+ s.ready=true; if(s.photo||s.aiImg) IMG.found=(IMG.found||0)+1; else console.warn('VOXA: sin imagen para', s.text.slice(0,60), candidates(s));
+ if(my===IMG.sid&&IMG.cur===s.i) showScene(s);
+ if(my===IMG.sid&&IMG.scenes.every(x=>x.ready)&&!IMG.found) note('🖼 No encontré imágenes para este texto. Si el problema sigue, revisá la conexión a internet o cargá la clave de Gemini en Ajustes para que la IA las elija.');
 }
 async function prepareImages(sents,text,my){
- IMG.scenes=makeScenes(sents); IMG.cur=-1; IMG.used=new Set(); if(!IMG.on) return;
+ IMG.scenes=makeScenes(sents); IMG.cur=-1; IMG.used=new Set(); IMG.found=0; if(!IMG.on) return;
  const an=analyzeTopic(text); IMG.topic=an.ents[0]||''; IMG.kws=an.kws;
  for(const s of IMG.scenes){ s.text=text.slice(s.start,s.end);
   const ents=entities(s.text); s.ents=[...new Set(ents.map(e=>e.t))].sort((a,b)=>(an.ents.indexOf(a)<0?99:an.ents.indexOf(a))-(an.ents.indexOf(b)<0?99:an.ents.indexOf(b))||b.length-a.length);
@@ -760,6 +771,7 @@ const VSLOTS=[
  {k:'tomas',n:'Tomás',g:'hombre',id:'cjVigY5qzO86Huf0OWal'},
  {k:'aurelio',n:'Don Aurelio',g:'anciano',id:'pqHfZKP75CvOlQylNhV4',set:{stability:.5,style:.3,speed:.92}},
 ];
+let freeEng=store.get('freeEng','piper');
 let vmap=store.get('vmap',{}), voiceK=store.get('voiceK','sofia'), ttsModel=store.get('model','eleven_multilingual_v2');
 let rate=store.get('rate',1), emo=store.get('emo',.45);
 const slotOf=k=>VSLOTS.find(v=>v.k===k)||VSLOTS[0];
@@ -780,7 +792,7 @@ function saldoTxt(){ if(SUB.rem==null) return 'No pude leer tu saldo (revisá qu
 function updateEngineUI(){
  const e=$('#eng');
  if(API.tts) e.innerHTML=`✅ Voz humana activa · Imágenes: fotos reales${API.img?' + ilustraciones IA':''}${API.plan?' · escenas elegidas por IA':''}<br>💳 ${saldoTxt()}`;
- else e.innerHTML='🔑 Para la voz humana, cargá tu clave de ElevenLabs en <b>Ajustes → Claves</b>. Mientras tanto uso la voz del dispositivo.';
+ else e.innerHTML=(freeEng==='device'?'📱 Voz del dispositivo (gratis).':'🧠 Voz IA gratis en tu dispositivo (sin créditos). La primera vez descarga cada voz (~65 MB).')+'<br>Para la voz premium, cargá tu clave de ElevenLabs en <b>Ajustes → Claves</b>.';
 }
 async function loadAccountVoices(){
  let list=[]; try{ list=(await api('voices')).voices||[]; }catch(e){ return; }
@@ -827,8 +839,38 @@ async function ckey(text){ const r=ttsReq(text), st=r.settings;
  try{ const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)); return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join(''); }catch(e){ return raw; } }
 const costMult=()=>/flash|turbo/.test(ttsModel)?.5:1;
 async function estimateCost(chs){ let n=0; for(const c of chs){ if(!(await cacheGet(await ckey(c.text)))) n+=c.text.length; } return Math.ceil(n*costMult()); }
+/* ---- voz IA gratis: corre dentro del dispositivo (Piper), sin créditos ni claves ---- */
+const PV={sofia:{id:'es_MX-claude-high',spk:0},valeria:{id:'es_ES-sharvard-medium',spk:1},mateo:{id:'es_MX-ald-medium',spk:0},tomas:{id:'es_ES-davefx-medium',spk:0},aurelio:{id:'es_ES-sharvard-medium',spk:0,len:1.1,pitch:.92}};
+let piperMod=null, piperSess=null, piperVoice='', piperQ=Promise.resolve();
+async function piperFor(vk){
+ const v=PV[vk]||PV.sofia;
+ if(!piperMod) piperMod=await import('./vendor/piper/piper-tts-web.js');
+ if(!piperSess||piperVoice!==v.id){
+  let have=[]; try{ have=await piperMod.stored(); }catch(e){}
+  if(!have.includes(v.id)){ sysMsg('DESCARGANDO VOZ · SOLO LA PRIMERA VEZ'); setStatus('DESCARGANDO VOZ'); }
+  piperMod.TtsSession._instance=null;
+  piperSess=await piperMod.TtsSession.create({voiceId:v.id,progress:p=>{ if(p.total&&p.url!=='tts://inference-progress'&&/onnx$/.test(p.url)) setStatus('DESCARGANDO VOZ '+Math.round(p.loaded/p.total*100)+'%'); }});
+  piperVoice=v.id;
+ }
+ return {sess:piperSess,v};
+}
+function wavDur(buf){ const d=new DataView(buf); const rate=d.getUint32(28,true); let o=12; while(o+8<=d.byteLength){ const id=String.fromCharCode(d.getUint8(o),d.getUint8(o+1),d.getUint8(o+2),d.getUint8(o+3)); const sz=d.getUint32(o+4,true); if(id==='data') return sz/rate; o+=8+sz; } return (buf.byteLength-44)/rate; }
+function pseudoAlign(c,dur){
+ // reparte la duración del audio entre las letras (vocales más largas, pausas en comas y puntos)
+ const ch=[...c.text], w=ch.map(x=>/[aeiouáéíóú]/i.test(x)?1.15:/[a-zñ]/i.test(x)?.72:/\s/.test(x)?.35:/[,;:]/.test(x)?2.6:/[.!?…]/.test(x)?3.6:.3);
+ const lead=Math.min(.12,dur*.04), tail=Math.min(.25,dur*.06), span=Math.max(.1,dur-lead-tail), tot=w.reduce((a,b)=>a+b,0);
+ let t=lead; c.ch=ch; c.st=[]; c.en=[]; for(const x of w){ c.st.push(t); t+=x/tot*span; c.en.push(t); } c.ratio=1;
+}
 function fetchChunk(i){
  const c=E.chunks[i]; if(!c) return Promise.resolve(null); if(c.p) return c.p;
+ if(E.engine==='piper'){
+  c.p=(piperQ=piperQ.catch(()=>{}).then(async()=>{
+   const {sess,v}=await piperFor(voiceK);
+   globalThis.__piperSpk=v.spk; globalThis.__piperLen=(v.len||1)/clamp(rate,.75,1.25); globalThis.__piperNoise=.8+emo*.6; globalThis.__piperNoiseW=.9+emo*.3;
+   const blob=await sess.predict(c.text); const dur=wavDur(await blob.arrayBuffer());
+   c.url=URL.createObjectURL(blob); pseudoAlign(c,dur); c.rateP=v.pitch||1; return c; }));
+  c.p.catch(()=>{}); return c.p;
+ }
  c.p=(async()=>{ const key=await ckey(c.text); const hit=await cacheGet(key); if(hit) return hit;
    const j=await api('tts',{...ttsReq(c.text),prev:E.chunks[i-1]?.text||'',next:E.chunks[i+1]?.text||''});
    if(j&&j.audio) cachePut(key,{audio:j.audio,al:j.al}); E.spent=true; return j; })()
@@ -839,10 +881,12 @@ function fetchChunk(i){
  c.p.catch(()=>{});
  return c.p;
 }
-async function startEleven(from){
+async function startEleven(from,engine){
  stopAll(true); const text=ta.value; total=Math.max(1,text.length);
- const my=++E.sid; IMG.sid=my; E.on=true; playing=true; E.paused=false; E.sent=-1; E.word=-1; setBtn();
- E.sents=buildChunks(text,0); E.chunks=ttsChunks(E.sents.filter(s=>s.start+s.text.length>from),text);
+ const my=++E.sid; IMG.sid=my; E.on=true; playing=true; E.paused=false; E.sent=-1; E.word=-1; E.engine=engine||'eleven'; setBtn();
+ E.sents=buildChunks(text,0);
+ const rest=E.sents.filter(s=>s.start+s.text.length>from);
+ E.chunks=E.engine==='piper'?rest.map(s=>({start:s.start,end:s.start+s.text.length,text:s.text})):ttsChunks(rest,text);
  if(from>0&&E.chunks[0]){ E.chunks[0].start=Math.max(E.chunks[0].start,from); E.chunks[0].text=text.slice(E.chunks[0].start,E.chunks[0].end); }
  if(!E.chunks.length){ playing=false; return; }
  setStatus('PREPARANDO VOZ');
@@ -858,7 +902,8 @@ async function startEleven(from){
 }
 function ttsFail(e){
  E.on=false; playing=false;
- if(e.status===401) note('🔑 La clave de ElevenLabs no es válida. Revisala en Ajustes → Claves.');
+ if(E.engine==='piper'){ console.warn('Piper',e); note('No pude cargar la voz IA gratis en este dispositivo ('+(e.message||e)+'). Sigo con la voz del dispositivo.'); }
+ else if(e.status===401) note('🔑 La clave de ElevenLabs no es válida. Revisala en Ajustes → Claves.');
  else note('La voz con IA no respondió: '+(e.message||e)+'. Sigo con la voz del dispositivo.');
  startDevice(0);
 }
@@ -866,7 +911,7 @@ async function playChunk(i,my){
  E.idx=i; let c; try{ c=await fetchChunk(i); }catch(e){ if(my===E.sid) ttsFail(e); return; }
  if(my!==E.sid||!c) return; fetchChunk(i+1);
  E.cur=c; setStatus('HABLANDO');
- E.player.src=c.url; try{ await E.player.play(); }catch(e){ setStatus('TOCÁ ▶ PARA ESCUCHAR'); E.paused=true; setBtn(); }
+ E.player.src=c.url; E.player.preservesPitch=!(c.rateP&&c.rateP!==1); E.player.playbackRate=c.rateP||1; try{ await E.player.play(); }catch(e){ setStatus('TOCÁ ▶ PARA ESCUCHAR'); E.paused=true; setBtn(); }
 }
 E.player.onended=()=>{ if(!E.on||E.paused||!E.cur) return; const my=E.sid; if(E.idx+1<E.chunks.length){ E.cur=null; setStatus('…'); playChunk(E.idx+1,my);} else { E.on=false; E.cur=null; finish(); } };
 function charIndexAt(c,t){ const st=c.st; let lo=0,hi=st.length-1; if(t<st[0]) return -1; while(lo<hi){const mid=(lo+hi+1)>>1; if(st[mid]<=t) lo=mid; else hi=mid-1;} return lo; }
@@ -902,8 +947,8 @@ function askCost(text){
    +'<br>Si lo volvés a escuchar igual, no se cobra de nuevo.';
   $('#askH').textContent=`🎙 VOZ HUMANA (${fmt(cost)} créditos)`; $('#askH').disabled=short; $('#askH').style.opacity=short?.4:1;
   const box=$('#ask'); box.hidden=false;
-  const done=v=>{ box.hidden=true; $('#askH').onclick=$('#askF').onclick=$('#askC').onclick=null; res(v); };
-  $('#askH').onclick=()=>done('h'); $('#askF').onclick=()=>done('f'); $('#askC').onclick=()=>done('c');
+  const done=v=>{ box.hidden=true; $('#askH').onclick=$('#askP').onclick=$('#askF').onclick=$('#askC').onclick=null; res(v); };
+  $('#askH').onclick=()=>done('h'); $('#askP').onclick=()=>done('p'); $('#askF').onclick=()=>done('f'); $('#askC').onclick=()=>done('c');
  });
 }
 /*__DEVICE__*/
@@ -963,6 +1008,7 @@ function frame(now){
 /* ============ INICIO ============ */
 $('#imgOn').checked=IMG.on; $('#imgOn').onchange=e=>{IMG.on=e.target.checked; store.set('imgOn',IMG.on); if(!IMG.on) clearImgs();};
 $('#aiOn').checked=IMG.ai; $('#aiOn').onchange=e=>{IMG.ai=e.target.checked; store.set('aiOn',IMG.ai);};
+$('#freeEng').value=freeEng; $('#freeEng').onchange=e=>{freeEng=e.target.value; store.set('freeEng',freeEng); updateEngineUI();};
 $('#model').value=ttsModel; $('#model').onchange=e=>{ttsModel=e.target.value; store.set('model',ttsModel);};
 for(const [id,k] of [['kEl','el'],['kFal','fal'],['kGem','gem']]){ const i=$('#'+id); i.value=KEYS[k]; i.onchange=()=>{ KEYS[k]=i.value.trim(); store.set(id,KEYS[k]); checkHealth(); }; }
 const emoI=$('#emo'); emoI.value=emo; $('#emoV').textContent=Math.round(emo*100)+'%'; emoI.oninput=()=>{emo=+emoI.value; $('#emoV').textContent=Math.round(emo*100)+'%'; store.set('emo',emo);};
