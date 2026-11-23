@@ -42,6 +42,7 @@ html,body{height:100%;background:#000;color:#e6f6ff;font-family:Rajdhani,system-
 #subs span{display:inline-block;color:#ffe81a;opacity:.3;-webkit-text-stroke:1.6px #000;paint-order:stroke fill;text-shadow:0 3px 0 #000,0 0 12px rgba(0,0,0,.8);transition:opacity .08s,transform .12s}
 #subs span.done{opacity:1}
 #subs span.on{opacity:1;transform:scale(1.08)}
+body.nosubs #subs span{display:none}
 #subs .sys{font-family:Orbitron;font-weight:500;font-size:12px;letter-spacing:.35em;color:var(--acc);-webkit-text-stroke:0;animation:pulse 1s infinite}
 #panel{position:fixed;left:0;right:0;bottom:0;z-index:4;padding:8px 14px 16px;
  background:linear-gradient(180deg,rgba(10,14,24,.55),rgba(3,5,10,.92));
@@ -127,6 +128,7 @@ input[type=range]{flex:1;accent-color:var(--acc)}
   <button class="btn" id="bSet" style="width:100%;margin-top:12px;flex:none">⚙ AJUSTES</button>
   <div id="sets" style="display:none">
    <div class="lbl">ESCENARIO</div><div class="chips" id="bgs"></div>
+   <label class="tog"><input type="checkbox" id="subOn"> Mostrar subtítulos</label>
    <label class="tog"><input type="checkbox" id="imgOn"> Mostrar imágenes de lo que se cuenta</label>
    <label class="tog"><input type="checkbox" id="aiOn"> Completar con imágenes de IA cuando no hay foto real</label>
    <div class="lbl">VELOCIDAD Y EXPRESIÓN</div>
@@ -1215,6 +1217,8 @@ function frame(now){
 }
 
 /* ============ INICIO ============ */
+const subOn=store.get('subOn',true); $('#subOn').checked=subOn; document.body.classList.toggle('nosubs',!subOn);
+$('#subOn').onchange=e=>{store.set('subOn',e.target.checked); document.body.classList.toggle('nosubs',!e.target.checked);};
 $('#imgOn').checked=IMG.on; $('#imgOn').onchange=e=>{IMG.on=e.target.checked; store.set('imgOn',IMG.on); if(!IMG.on) clearImgs();};
 $('#aiOn').checked=IMG.ai; $('#aiOn').onchange=e=>{IMG.ai=e.target.checked; store.set('aiOn',IMG.ai);};
 $('#freeEng').value=freeEng; $('#freeEng').onchange=e=>{freeEng=e.target.value; store.set('freeEng',freeEng); updateEngineUI();};
